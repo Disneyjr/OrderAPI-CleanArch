@@ -1,0 +1,18 @@
+### HEALTH CHECK
+GET http://localhost:8080/health
+
+### LIST ORDERS
+GET http://localhost:8080/orders
+
+### GET ORDER BY ID
+GET http://localhost:8080/orders/3
+
+### CREATE ORDER
+POST http://localhost:8080/orders
+Content-Type: application/json
+
+{
+  "description": "New Order 2",
+  "price": 10.0,
+  "tax": 20.0
+}
