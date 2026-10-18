@@ -1,15 +1,15 @@
-### LIST ORDERS
-GET http://localhost:8000/orders HTTP/1.1
-Host: localhost:8000
-Content-Type: application/json
-
 ### CREATE ORDER
 POST http://localhost:8000/order HTTP/1.1
 Host: localhost:8000
 Content-Type: application/json
 
 {
-    "id":"a",
+    "id": "a",
     "price": 100.5,
     "tax": 0.5
 }
+
+### LIST ORDERS
+GET http://localhost:8000/order HTTP/1.1
+Host: localhost:8000
+Content-Type: application/json

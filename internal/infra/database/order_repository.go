@@ -27,14 +27,20 @@ func (r *OrderRepository) Save(order *entity.Order) error {
 }
 
 func (r *OrderRepository) GetAll() ([]entity.Order, error) {
-	var orders []entity.Order
-	rows, err := r.Db.Query("SELECT * FROM ORDERS")
+	rows, err := r.Db.Query("SELECT id, price, tax, final_price FROM orders")
 	if err != nil {
-		return orders, err
+		return nil, err
 	}
+	defer rows.Close()
 
-	if err := rows.Scan(orders); err != nil {
-		return orders, err
+	var orders []entity.Order
+	for rows.Next() {
+		var order entity.Order
+		if err := rows.Scan(&order.ID, &order.Price, &order.Tax, &order.FinalPrice); err != nil {
+			return nil, err
+		}
+		orders = append(orders, order)
 	}
 	return orders, nil
 }
+

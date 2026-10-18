@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"time"
 
 	graphql_handler "github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/playground"
@@ -35,7 +36,10 @@ func main() {
 	}
 	defer db.Close()
 
-	rabbitMQChannel := getRabbitMQChannel()
+	waitForDB(db)
+	runMigrations(db)
+
+	rabbitMQChannel := getRabbitMQChannel(configs.RabbitMQUser, configs.RabbitMQPass, configs.RabbitMQHost, configs.RabbitMQPort)
 
 	eventDispatcher := events.NewEventDispatcher()
 	eventDispatcher.Register("OrderCreated", &handler.OrderCreatedHandler{
@@ -43,16 +47,17 @@ func main() {
 	})
 
 	createOrderUseCase := NewCreateOrderUseCase(db, eventDispatcher)
-	getOrdersUseCase := NewGetOrderUseCase(db)
+	listOrdersUseCase := NewListOrdersUseCase(db)
+
 	webserver := webserver.NewWebServer(configs.WebServerPort)
 	webOrderHandler := NewWebOrderHandler(db, eventDispatcher)
-	webserver.AddHandler("/order", webOrderHandler.Create)
-	webserver.AddHandler("/order", webOrderHandler.Get)
+	webserver.AddMethodHandler(http.MethodPost, "/order", webOrderHandler.Create)
+	webserver.AddMethodHandler(http.MethodGet, "/order", webOrderHandler.Get)
 	fmt.Println("Starting web server on port", configs.WebServerPort)
 	go webserver.Start()
 
 	grpcServer := grpc.NewServer()
-	orderService := service.NewOrderService(*createOrderUseCase, *getOrdersUseCase)
+	orderService := service.NewOrderService(*createOrderUseCase, *listOrdersUseCase)
 	pb.RegisterOrderServiceServer(grpcServer, orderService)
 	reflection.Register(grpcServer)
 
@@ -65,6 +70,7 @@ func main() {
 
 	srv := graphql_handler.NewDefaultServer(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{
 		CreateOrderUseCase: *createOrderUseCase,
+		ListOrdersUseCase:  *listOrdersUseCase,
 	}}))
 	http.Handle("/", playground.Handler("GraphQL playground", "/query"))
 	http.Handle("/query", srv)
@@ -73,8 +79,44 @@ func main() {
 	http.ListenAndServe(":"+configs.GraphQLServerPort, nil)
 }
 
-func getRabbitMQChannel() *amqp.Channel {
-	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+func waitForDB(db *sql.DB) {
+	for i := 0; i < 30; i++ {
+		if err := db.Ping(); err == nil {
+			return
+		}
+		fmt.Println("Waiting for database connection...")
+		time.Sleep(2 * time.Second)
+	}
+	if err := db.Ping(); err != nil {
+		panic(err)
+	}
+}
+
+func runMigrations(db *sql.DB) {
+	query := `CREATE TABLE IF NOT EXISTS orders (
+		id varchar(255) NOT NULL,
+		price float NOT NULL,
+		tax float NOT NULL,
+		final_price float NOT NULL,
+		PRIMARY KEY (id)
+	);`
+	if _, err := db.Exec(query); err != nil {
+		panic(err)
+	}
+}
+
+func getRabbitMQChannel(user, pass, host, port string) *amqp.Channel {
+	url := fmt.Sprintf("amqp://%s:%s@%s:%s/", user, pass, host, port)
+	var conn *amqp.Connection
+	var err error
+	for i := 0; i < 30; i++ {
+		conn, err = amqp.Dial(url)
+		if err == nil {
+			break
+		}
+		fmt.Println("Waiting for RabbitMQ connection...")
+		time.Sleep(2 * time.Second)
+	}
 	if err != nil {
 		panic(err)
 	}
@@ -82,5 +124,20 @@ func getRabbitMQChannel() *amqp.Channel {
 	if err != nil {
 		panic(err)
 	}
+	_, _ = ch.QueueDeclare(
+		"orders", // name
+		true,     // durable
+		false,    // delete when unused
+		false,    // exclusive
+		false,    // no-wait
+		nil,      // arguments
+	)
+	_ = ch.QueueBind(
+		"orders",       // queue name
+		"",             // routing key
+		"amq.direct",   // exchange
+		false,
+		nil,
+	)
 	return ch
 }

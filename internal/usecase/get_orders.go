@@ -11,9 +11,14 @@ func NewGetOrdersUseCase(OrderRepository entity.OrderRepositoryInterface) *GetOr
 		OrderRepository: OrderRepository,
 	}
 }
+type ListOrdersUseCase = GetOrdersUseCase
+
+func NewListOrdersUseCase(OrderRepository entity.OrderRepositoryInterface) *ListOrdersUseCase {
+	return NewGetOrdersUseCase(OrderRepository)
+}
+
 func (c *GetOrdersUseCase) Execute() ([]OrderOutputDTO, error) {
-	var ordersDTO []OrderOutputDTO
-	var orders []entity.Order
+	ordersDTO := []OrderOutputDTO{}
 	orders, err := c.OrderRepository.GetAll()
 	if err != nil {
 		return ordersDTO, err
@@ -29,3 +34,4 @@ func (c *GetOrdersUseCase) Execute() ([]OrderOutputDTO, error) {
 	}
 	return ordersDTO, nil
 }
+
