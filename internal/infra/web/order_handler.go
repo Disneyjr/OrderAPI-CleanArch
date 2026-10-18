@@ -47,3 +47,29 @@ func (h *WebOrderHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+func (h *WebOrderHandler) Handle(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		h.Get(w, r)
+		return
+	}
+	if r.Method == http.MethodPost {
+		h.Create(w, r)
+		return
+	}
+	http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+}
+
+func (h *WebOrderHandler) Get(w http.ResponseWriter, r *http.Request) {
+	listOrders := usecase.NewListOrdersUseCase(h.OrderRepository)
+	output, err := listOrders.Execute()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	err = json.NewEncoder(w).Encode(output)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
